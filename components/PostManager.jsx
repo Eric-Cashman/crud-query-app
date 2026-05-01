@@ -1,31 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 const BASE_URL = "https://jsonplaceholder.typicode.com";
 
-export default function PostsManager() {
+const showAlert = (title, message) => {
+  window.alert(`${title}\n\n${message}`);
+};
+
+const showConfirm = (title, message) => {
+  return window.confirm(`${title}\n\n${message}`);
+};
+
+export default function PostManager() {
   const queryClient = useQueryClient();
 
   const [filterUserId, setFilterUserId] = useState("");
-
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
-
   const [editingPost, setEditingPost] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
-
   const [patchId, setPatchId] = useState("");
   const [patchTitle, setPatchTitle] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+
+  const showStatus = (message) => {
+    setStatusMessage(message);
+    setTimeout(() => setStatusMessage(""), 3000);
+  };
 
   const { data: posts, isPending, isError } = useQuery({
     queryKey: ["posts", filterUserId],
@@ -50,10 +60,13 @@ export default function PostsManager() {
       return response.json();
     },
     onSuccess: (data) => {
-      Alert.alert("Success", `Post created with ID: ${data.id}`);
+      showStatus(`✅ Post created successfully with ID: ${data.id}`);
       setNewTitle("");
       setNewBody("");
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+    onError: () => {
+      showStatus("❌ Failed to create post");
     }
   });
 
@@ -68,11 +81,14 @@ export default function PostsManager() {
       return response.json();
     },
     onSuccess: () => {
-      Alert.alert("Success", "Post updated successfully!");
+      showStatus("✅ Post updated successfully!");
       setEditingPost(null);
       setEditTitle("");
       setEditBody("");
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+    onError: () => {
+      showStatus("❌ Failed to update post");
     }
   });
 
@@ -87,10 +103,13 @@ export default function PostsManager() {
       return response.json();
     },
     onSuccess: (data) => {
-      Alert.alert("Success", `Title patched to: ${data.title}`);
+      showStatus(`✅ Title patched to: "${data.title}"`);
       setPatchId("");
       setPatchTitle("");
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+    onError: () => {
+      showStatus("❌ Failed to patch post");
     }
   });
 
@@ -103,8 +122,11 @@ export default function PostsManager() {
       return response.json();
     },
     onSuccess: () => {
-      Alert.alert("Success", "Post deleted successfully!");
+      showStatus("✅ Post deleted successfully!");
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+    onError: () => {
+      showStatus("❌ Failed to delete post");
     }
   });
 
@@ -112,13 +134,29 @@ export default function PostsManager() {
     setEditingPost(post);
     setEditTitle(post.title);
     setEditBody(post.body);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDelete = (id) => {
+    const confirmed = showConfirm(
+      "Delete Post",
+      "Are you sure you want to delete this post?"
+    );
+    if (confirmed) {
+      deletePost.mutate(id);
+    }
   };
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>📝 Blog Post Manager</Text>
 
-      {/* Filter by User ID */}
+      {statusMessage !== "" && (
+        <View style={styles.statusBanner}>
+          <Text style={styles.statusText}>{statusMessage}</Text>
+        </View>
+      )}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Filter by User ID</Text>
         <TextInput
@@ -136,7 +174,6 @@ export default function PostsManager() {
         </TouchableOpacity>
       </View>
 
-      {/* Create New Post */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Create New Post</Text>
         <TextInput
@@ -156,17 +193,18 @@ export default function PostsManager() {
           style={styles.btnPrimary}
           onPress={() => {
             if (!newTitle || !newBody) {
-              Alert.alert("Error", "Please fill in both title and body");
+              showStatus("❌ Please fill in both title and body");
               return;
             }
             createPost.mutate({ title: newTitle, body: newBody, userId: 1 });
           }}
         >
-          <Text style={styles.btnText}>Create Post</Text>
+          <Text style={styles.btnText}>
+            {createPost.isPending ? "Creating..." : "Create Post"}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Patch Post Title */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Patch Post Title Only</Text>
         <TextInput
@@ -186,17 +224,18 @@ export default function PostsManager() {
           style={styles.btnWarning}
           onPress={() => {
             if (!patchId || !patchTitle) {
-              Alert.alert("Error", "Please enter both ID and new title");
+              showStatus("❌ Please enter both ID and new title");
               return;
             }
             patchPost.mutate({ id: patchId, title: patchTitle });
           }}
         >
-          <Text style={styles.btnText}>Patch Title</Text>
+          <Text style={styles.btnText}>
+            {patchPost.isPending ? "Patching..." : "Patch Title"}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Edit Post Form (shows when editing) */}
       {editingPost && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
@@ -225,7 +264,9 @@ export default function PostsManager() {
               })
             }
           >
-            <Text style={styles.btnText}>Save Changes</Text>
+            <Text style={styles.btnText}>
+              {updatePost.isPending ? "Saving..." : "Save Changes"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.btnSecondary}
@@ -236,13 +277,14 @@ export default function PostsManager() {
         </View>
       )}
 
-      {/* Posts List */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
           Posts {filterUserId ? `(User ${filterUserId})` : "(All)"}
         </Text>
 
-        {isPending && <Text style={styles.statusMsg}>🔄 Loading posts...</Text>}
+        {isPending && (
+          <Text style={styles.statusMsg}>🔄 Loading posts...</Text>
+        )}
         {isError && (
           <Text style={styles.errorMsg}>❌ Error loading posts!</Text>
         )}
@@ -263,22 +305,11 @@ export default function PostsManager() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteBtn}
-                onPress={() =>
-                  Alert.alert(
-                    "Delete Post",
-                    "Are you sure?",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: () => deletePost.mutate(post.id)
-                      }
-                    ]
-                  )
-                }
+                onPress={() => handleDelete(post.id)}
               >
-                <Text style={styles.btnText}>Delete</Text>
+                <Text style={styles.btnText}>
+                  {deletePost.isPending ? "Deleting..." : "Delete"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -301,6 +332,18 @@ const styles = StyleSheet.create({
     marginTop: 50,
     marginBottom: 20,
     color: "#1a1a2e"
+  },
+  statusBanner: {
+    backgroundColor: "#1a1a2e",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: "center"
+  },
+  statusText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500"
   },
   section: {
     backgroundColor: "#fff",
